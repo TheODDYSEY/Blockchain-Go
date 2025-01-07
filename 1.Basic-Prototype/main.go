@@ -54,6 +54,10 @@ func NewBlockchain() *Blockchain {
 	return &Blockchain{[]*Block{NewGenesisBlock()}}
 }
 
+// main is the entry point for the application
+// It creates a new blockchain and adds two blocks to it
+// It then prints the blockchain
+
 func main() {
 	bc := NewBlockchain()
 
