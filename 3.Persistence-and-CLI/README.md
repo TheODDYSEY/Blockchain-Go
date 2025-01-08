@@ -1,4 +1,4 @@
-# Blockchain Go
+# Building Blockchain in Go. Part 3: Persistence and CLI
 
 This project is a simple implementation of a blockchain in Go, featuring basic blockchain functionalities such as adding blocks, proof-of-work, and persistence using BoltDB.
 
