@@ -17,6 +17,29 @@ import (
 	"github.com/boltdb/bolt"
 )
 
+// BLOCKCHAIN
+const dbFile = "blockchain.db"
+const blocksBucket = "blocks"
+// PROOF OF WORK STEP
+var (
+	maxNonce = math.MaxInt64
+)
+
+const targetBits = 16
+
+
+// Blockchain keeps a sequence of Blocks
+type Blockchain struct {
+	tip []byte
+	db  *bolt.DB
+}
+
+// BlockchainIterator is used to iterate over blockchain blocks
+type BlockchainIterator struct {
+	currentHash []byte
+	db          *bolt.DB
+}
+
 // Block keeps block headers
 type Block struct {
 	Timestamp     int64
@@ -24,6 +47,19 @@ type Block struct {
 	PrevBlockHash []byte
 	Hash          []byte
 	Nonce         int
+}
+
+// CLI STEP
+// CLI responsible for processing command line arguments
+type CLI struct {
+	bc *Blockchain
+}
+
+
+// ProofOfWork represents a proof-of-work
+type ProofOfWork struct {
+	block  *Block
+	target *big.Int
 }
 
 // Serialize serializes the block
@@ -69,21 +105,7 @@ func DeserializeBlock(d []byte) *Block {
 	return &block
 }
 
-// BLOCKCHAIN
-const dbFile = "blockchain.db"
-const blocksBucket = "blocks"
 
-// Blockchain keeps a sequence of Blocks
-type Blockchain struct {
-	tip []byte
-	db  *bolt.DB
-}
-
-// BlockchainIterator is used to iterate over blockchain blocks
-type BlockchainIterator struct {
-	currentHash []byte
-	db          *bolt.DB
-}
 
 // AddBlock saves provided data as a block in the blockchain
 func (bc *Blockchain) AddBlock(data string) {
@@ -195,11 +217,6 @@ func NewBlockchain() *Blockchain {
 }
 
 
-// CLI STEP
-// CLI responsible for processing command line arguments
-type CLI struct {
-	bc *Blockchain
-}
 
 func (cli *CLI) printUsage() {
 	fmt.Println("Usage:")
@@ -276,18 +293,8 @@ func (cli *CLI) Run() {
 	}
 }
 
-// PROOF OF WORK STEP
-var (
-	maxNonce = math.MaxInt64
-)
 
-const targetBits = 16
 
-// ProofOfWork represents a proof-of-work
-type ProofOfWork struct {
-	block  *Block
-	target *big.Int
-}
 
 // NewProofOfWork builds and returns a ProofOfWork
 func NewProofOfWork(b *Block) *ProofOfWork {
