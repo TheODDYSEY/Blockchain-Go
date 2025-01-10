@@ -69,6 +69,18 @@ type Transaction struct {
 	Vin  []TXInput
 	Vout []TXOutput
 }
+// TXInput represents a transaction input
+type TXInput struct {
+	Txid      []byte
+	Vout      int
+	ScriptSig string
+}
+
+// TXOutput represents a transaction output
+type TXOutput struct {
+	Value        int
+	ScriptPubKey string
+}
 
 // IntToHex converts an int64 to a byte array
 func IntToHex(num int64) []byte {
@@ -526,18 +538,6 @@ func (tx *Transaction) SetID() {
 	tx.ID = hash[:]
 }
 
-// TXInput represents a transaction input
-type TXInput struct {
-	Txid      []byte
-	Vout      int
-	ScriptSig string
-}
-
-// TXOutput represents a transaction output
-type TXOutput struct {
-	Value        int
-	ScriptPubKey string
-}
 
 // CanUnlockOutputWith checks whether the address initiated the transaction
 func (in *TXInput) CanUnlockOutputWith(unlockingData string) bool {
