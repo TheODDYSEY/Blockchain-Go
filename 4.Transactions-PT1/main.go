@@ -28,7 +28,7 @@ var (
 	maxNonce = math.MaxInt64
 )
 
-const targetBits = 4
+const targetBits = 16
 
 const subsidy = 10
 
