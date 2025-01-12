@@ -32,27 +32,37 @@ Generate a new wallet address:
 
 ```
 blockchain_go createwallet
+
+Your new address: 13Uu7B1vDP4ViXqHFsWtbraM3EfQ3UkWXt
 ```
 
 ### Creating a Blockchain
 Create a new blockchain and mine the genesis block:
 
 ```
-blockchain_go createblockchain -address <your-wallet-address>
+blockchain_go createblockchain -address 13Uu7B1vDP4ViXqHFsWtbraM3EfQ3UkWXt
+
+0000005420fbfdafa00c093f56e033903ba43599fa7cd9df40458e373eee724d
 ```
 
 ### Sending Transactions
 Send coins from one address to another:
 
 ```
-blockchain_go send -from <sender-address> -to <recipient-address> -amount <amount>
+blockchain_go send -from 13Uu7B1vDP4ViXqHFsWtbraM3EfQ3UkWXt -to 15pUhCbtrGh3JUx5iHnXjfpyHyTgawvG5h -amount 6
+
+00000019afa909094193f64ca06e9039849709f5948fbac56cae7b1b8f0ff162
+
+Success!
 ```
 
 ### Checking Balances
 Check the balance of a specific wallet:
 
 ```
-blockchain_go getbalance -address <wallet-address>
+blockchain_go getbalance -address 13Uu7B1vDP4ViXqHFsWtbraM3EfQ3UkWXt
+
+Balance of '13Uu7B1vDP4ViXqHFsWtbraM3EfQ3UkWXt': 10
 ```
 
 ## Implementation Details
