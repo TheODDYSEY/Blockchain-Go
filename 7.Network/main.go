@@ -1,47 +1,33 @@
 package main
 
 import (
-	"bytes"
-	"encoding/gob"
-	"log"
-	"time"
-    "math/big"
     "bytes"
-	"crypto/ecdsa"
-	"encoding/hex"
-	"errors"
-	"fmt"
-	"log"
-	"os"
-    "flag"
-	"fmt"
-	"log"
-
-	"os"
-    "strconv"
+    "crypto/ecdsa"
+    "crypto/elliptic"
+    "crypto/rand"
     "crypto/sha256"
-
-	"github.com/boltdb/bolt"
+    "encoding/binary"
+    "encoding/gob"
     "encoding/hex"
-	"fmt"
-	"testing"
-    "bytes"
-	"crypto/sha256"
-	"fmt"
-	"math"
-	"math/big"
-    "bytes"
-	"encoding/gob"
-	"encoding/hex"
-	"fmt"
-	"io"
-	"io/ioutil"
-	"log"
-	"net"
-
-	"github.com/stretchr/testify/assert"
+    "errors"
+    "flag"
+    "fmt"
+    "io"
+    "io/ioutil"
+    "log"
+    "math"
+    "math/big"
+    "net"
+    "os"
+    "strconv"
+    "strings"
+    "testing"
+    "time"
+    
+    "github.com/boltdb/bolt"
+    "github.com/stretchr/testify/assert"
+    "golang.org/x/crypto/ripemd160"
 )
-
 
 const dbFile = "blockchain_%s.db"
 const blocksBucket = "blocks"
@@ -52,6 +38,11 @@ var (
 )
 
 const targetBits = 16
+const subsidy = 10
+const utxoBucket = "chainstate"
+const version = byte(0x00)
+const addressChecksumLen = 4
+const walletFile = "wallet_%s.dat"
 
 const protocol = "tcp"
 const nodeVersion = 1
@@ -142,6 +133,44 @@ type verzion struct {
 	BestHeight int
 	AddrFrom   string
 }
+
+// Transaction represents a Bitcoin transaction
+type Transaction struct {
+	ID   []byte
+	Vin  []TXInput
+	Vout []TXOutput
+}
+
+// TXInput represents a transaction input
+type TXInput struct {
+	Txid      []byte
+	Vout      int
+	Signature []byte
+	PubKey    []byte
+}
+
+// TXOutput represents a transaction output
+type TXOutput struct {
+	Value      int
+	PubKeyHash []byte
+}
+
+// UTXOSet represents UTXO set
+type UTXOSet struct {
+	Blockchain *Blockchain
+}
+
+// Wallet stores private and public keys
+type Wallet struct {
+	PrivateKey ecdsa.PrivateKey
+	PublicKey  []byte
+}
+
+// Wallets stores a collection of wallets
+type Wallets struct {
+	Wallets map[string]*Wallet
+}
+
 
 // Base58Encode encodes a byte array to Base58
 func Base58Encode(input []byte) []byte {
@@ -1467,4 +1496,628 @@ func nodeIsKnown(addr string) bool {
 	}
 
 	return false
+}
+
+// IsCoinbase checks whether the transaction is coinbase
+func (tx Transaction) IsCoinbase() bool {
+	return len(tx.Vin) == 1 && len(tx.Vin[0].Txid) == 0 && tx.Vin[0].Vout == -1
+}
+
+// Serialize returns a serialized Transaction
+func (tx Transaction) Serialize() []byte {
+	var encoded bytes.Buffer
+
+	enc := gob.NewEncoder(&encoded)
+	err := enc.Encode(tx)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	return encoded.Bytes()
+}
+
+// Hash returns the hash of the Transaction
+func (tx *Transaction) Hash() []byte {
+	var hash [32]byte
+
+	txCopy := *tx
+	txCopy.ID = []byte{}
+
+	hash = sha256.Sum256(txCopy.Serialize())
+
+	return hash[:]
+}
+
+// Sign signs each input of a Transaction
+func (tx *Transaction) Sign(privKey ecdsa.PrivateKey, prevTXs map[string]Transaction) {
+	if tx.IsCoinbase() {
+		return
+	}
+
+	for _, vin := range tx.Vin {
+		if prevTXs[hex.EncodeToString(vin.Txid)].ID == nil {
+			log.Panic("ERROR: Previous transaction is not correct")
+		}
+	}
+
+	txCopy := tx.TrimmedCopy()
+
+	for inID, vin := range txCopy.Vin {
+		prevTx := prevTXs[hex.EncodeToString(vin.Txid)]
+		txCopy.Vin[inID].Signature = nil
+		txCopy.Vin[inID].PubKey = prevTx.Vout[vin.Vout].PubKeyHash
+
+		dataToSign := fmt.Sprintf("%x\n", txCopy)
+
+		r, s, err := ecdsa.Sign(rand.Reader, &privKey, []byte(dataToSign))
+		if err != nil {
+			log.Panic(err)
+		}
+		signature := append(r.Bytes(), s.Bytes()...)
+
+		tx.Vin[inID].Signature = signature
+		txCopy.Vin[inID].PubKey = nil
+	}
+}
+
+// String returns a human-readable representation of a transaction
+func (tx Transaction) String() string {
+	var lines []string
+
+	lines = append(lines, fmt.Sprintf("--- Transaction %x:", tx.ID))
+
+	for i, input := range tx.Vin {
+
+		lines = append(lines, fmt.Sprintf("     Input %d:", i))
+		lines = append(lines, fmt.Sprintf("       TXID:      %x", input.Txid))
+		lines = append(lines, fmt.Sprintf("       Out:       %d", input.Vout))
+		lines = append(lines, fmt.Sprintf("       Signature: %x", input.Signature))
+		lines = append(lines, fmt.Sprintf("       PubKey:    %x", input.PubKey))
+	}
+
+	for i, output := range tx.Vout {
+		lines = append(lines, fmt.Sprintf("     Output %d:", i))
+		lines = append(lines, fmt.Sprintf("       Value:  %d", output.Value))
+		lines = append(lines, fmt.Sprintf("       Script: %x", output.PubKeyHash))
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// TrimmedCopy creates a trimmed copy of Transaction to be used in signing
+func (tx *Transaction) TrimmedCopy() Transaction {
+	var inputs []TXInput
+	var outputs []TXOutput
+
+	for _, vin := range tx.Vin {
+		inputs = append(inputs, TXInput{vin.Txid, vin.Vout, nil, nil})
+	}
+
+	for _, vout := range tx.Vout {
+		outputs = append(outputs, TXOutput{vout.Value, vout.PubKeyHash})
+	}
+
+	txCopy := Transaction{tx.ID, inputs, outputs}
+
+	return txCopy
+}
+
+// Verify verifies signatures of Transaction inputs
+func (tx *Transaction) Verify(prevTXs map[string]Transaction) bool {
+	if tx.IsCoinbase() {
+		return true
+	}
+
+	for _, vin := range tx.Vin {
+		if prevTXs[hex.EncodeToString(vin.Txid)].ID == nil {
+			log.Panic("ERROR: Previous transaction is not correct")
+		}
+	}
+
+	txCopy := tx.TrimmedCopy()
+	curve := elliptic.P256()
+
+	for inID, vin := range tx.Vin {
+		prevTx := prevTXs[hex.EncodeToString(vin.Txid)]
+		txCopy.Vin[inID].Signature = nil
+		txCopy.Vin[inID].PubKey = prevTx.Vout[vin.Vout].PubKeyHash
+
+		r := big.Int{}
+		s := big.Int{}
+		sigLen := len(vin.Signature)
+		r.SetBytes(vin.Signature[:(sigLen / 2)])
+		s.SetBytes(vin.Signature[(sigLen / 2):])
+
+		x := big.Int{}
+		y := big.Int{}
+		keyLen := len(vin.PubKey)
+		x.SetBytes(vin.PubKey[:(keyLen / 2)])
+		y.SetBytes(vin.PubKey[(keyLen / 2):])
+
+		dataToVerify := fmt.Sprintf("%x\n", txCopy)
+
+		rawPubKey := ecdsa.PublicKey{curve, &x, &y}
+		if ecdsa.Verify(&rawPubKey, []byte(dataToVerify), &r, &s) == false {
+			return false
+		}
+		txCopy.Vin[inID].PubKey = nil
+	}
+
+	return true
+}
+
+// NewCoinbaseTX creates a new coinbase transaction
+func NewCoinbaseTX(to, data string) *Transaction {
+	if data == "" {
+		randData := make([]byte, 20)
+		_, err := rand.Read(randData)
+		if err != nil {
+			log.Panic(err)
+		}
+
+		data = fmt.Sprintf("%x", randData)
+	}
+
+	txin := TXInput{[]byte{}, -1, nil, []byte(data)}
+	txout := NewTXOutput(subsidy, to)
+	tx := Transaction{nil, []TXInput{txin}, []TXOutput{*txout}}
+	tx.ID = tx.Hash()
+
+	return &tx
+}
+
+// NewUTXOTransaction creates a new transaction
+func NewUTXOTransaction(wallet *Wallet, to string, amount int, UTXOSet *UTXOSet) *Transaction {
+	var inputs []TXInput
+	var outputs []TXOutput
+
+	pubKeyHash := HashPubKey(wallet.PublicKey)
+	acc, validOutputs := UTXOSet.FindSpendableOutputs(pubKeyHash, amount)
+
+	if acc < amount {
+		log.Panic("ERROR: Not enough funds")
+	}
+
+	// Build a list of inputs
+	for txid, outs := range validOutputs {
+		txID, err := hex.DecodeString(txid)
+		if err != nil {
+			log.Panic(err)
+		}
+
+		for _, out := range outs {
+			input := TXInput{txID, out, nil, wallet.PublicKey}
+			inputs = append(inputs, input)
+		}
+	}
+
+	// Build a list of outputs
+	from := fmt.Sprintf("%s", wallet.GetAddress())
+	outputs = append(outputs, *NewTXOutput(amount, to))
+	if acc > amount {
+		outputs = append(outputs, *NewTXOutput(acc-amount, from)) // a change
+	}
+
+	tx := Transaction{nil, inputs, outputs}
+	tx.ID = tx.Hash()
+	UTXOSet.Blockchain.SignTransaction(&tx, wallet.PrivateKey)
+
+	return &tx
+}
+
+// DeserializeTransaction deserializes a transaction
+func DeserializeTransaction(data []byte) Transaction {
+	var transaction Transaction
+
+	decoder := gob.NewDecoder(bytes.NewReader(data))
+	err := decoder.Decode(&transaction)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	return transaction
+}
+
+// UsesKey checks whether the address initiated the transaction
+func (in *TXInput) UsesKey(pubKeyHash []byte) bool {
+	lockingHash := HashPubKey(in.PubKey)
+
+	return bytes.Compare(lockingHash, pubKeyHash) == 0
+}
+
+// Lock signs the output
+func (out *TXOutput) Lock(address []byte) {
+	pubKeyHash := Base58Decode(address)
+	pubKeyHash = pubKeyHash[1 : len(pubKeyHash)-4]
+	out.PubKeyHash = pubKeyHash
+}
+
+// IsLockedWithKey checks if the output can be used by the owner of the pubkey
+func (out *TXOutput) IsLockedWithKey(pubKeyHash []byte) bool {
+	return bytes.Compare(out.PubKeyHash, pubKeyHash) == 0
+}
+
+// NewTXOutput create a new TXOutput
+func NewTXOutput(value int, address string) *TXOutput {
+	txo := &TXOutput{value, nil}
+	txo.Lock([]byte(address))
+
+	return txo
+}
+
+// TXOutputs collects TXOutput
+type TXOutputs struct {
+	Outputs []TXOutput
+}
+
+// Serialize serializes TXOutputs
+func (outs TXOutputs) Serialize() []byte {
+	var buff bytes.Buffer
+
+	enc := gob.NewEncoder(&buff)
+	err := enc.Encode(outs)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	return buff.Bytes()
+}
+
+// DeserializeOutputs deserializes TXOutputs
+func DeserializeOutputs(data []byte) TXOutputs {
+	var outputs TXOutputs
+
+	dec := gob.NewDecoder(bytes.NewReader(data))
+	err := dec.Decode(&outputs)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	return outputs
+}
+
+// IntToHex converts an int64 to a byte array
+func IntToHex(num int64) []byte {
+	buff := new(bytes.Buffer)
+	err := binary.Write(buff, binary.BigEndian, num)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	return buff.Bytes()
+}
+
+// ReverseBytes reverses a byte array
+func ReverseBytes(data []byte) {
+	for i, j := 0, len(data)-1; i < j; i, j = i+1, j-1 {
+		data[i], data[j] = data[j], data[i]
+	}
+}
+
+// FindSpendableOutputs finds and returns unspent outputs to reference in inputs
+func (u UTXOSet) FindSpendableOutputs(pubkeyHash []byte, amount int) (int, map[string][]int) {
+	unspentOutputs := make(map[string][]int)
+	accumulated := 0
+	db := u.Blockchain.db
+
+	err := db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(utxoBucket))
+		c := b.Cursor()
+
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			txID := hex.EncodeToString(k)
+			outs := DeserializeOutputs(v)
+
+			for outIdx, out := range outs.Outputs {
+				if out.IsLockedWithKey(pubkeyHash) && accumulated < amount {
+					accumulated += out.Value
+					unspentOutputs[txID] = append(unspentOutputs[txID], outIdx)
+				}
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		log.Panic(err)
+	}
+
+	return accumulated, unspentOutputs
+}
+
+// FindUTXO finds UTXO for a public key hash
+func (u UTXOSet) FindUTXO(pubKeyHash []byte) []TXOutput {
+	var UTXOs []TXOutput
+	db := u.Blockchain.db
+
+	err := db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(utxoBucket))
+		c := b.Cursor()
+
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			outs := DeserializeOutputs(v)
+
+			for _, out := range outs.Outputs {
+				if out.IsLockedWithKey(pubKeyHash) {
+					UTXOs = append(UTXOs, out)
+				}
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		log.Panic(err)
+	}
+
+	return UTXOs
+}
+
+// CountTransactions returns the number of transactions in the UTXO set
+func (u UTXOSet) CountTransactions() int {
+	db := u.Blockchain.db
+	counter := 0
+
+	err := db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(utxoBucket))
+		c := b.Cursor()
+
+		for k, _ := c.First(); k != nil; k, _ = c.Next() {
+			counter++
+		}
+
+		return nil
+	})
+	if err != nil {
+		log.Panic(err)
+	}
+
+	return counter
+}
+
+// Reindex rebuilds the UTXO set
+func (u UTXOSet) Reindex() {
+	db := u.Blockchain.db
+	bucketName := []byte(utxoBucket)
+
+	err := db.Update(func(tx *bolt.Tx) error {
+		err := tx.DeleteBucket(bucketName)
+		if err != nil && err != bolt.ErrBucketNotFound {
+			log.Panic(err)
+		}
+
+		_, err = tx.CreateBucket(bucketName)
+		if err != nil {
+			log.Panic(err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		log.Panic(err)
+	}
+
+	UTXO := u.Blockchain.FindUTXO()
+
+	err = db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket(bucketName)
+
+		for txID, outs := range UTXO {
+			key, err := hex.DecodeString(txID)
+			if err != nil {
+				log.Panic(err)
+			}
+
+			err = b.Put(key, outs.Serialize())
+			if err != nil {
+				log.Panic(err)
+			}
+		}
+
+		return nil
+	})
+}
+
+// Update updates the UTXO set with transactions from the Block
+// The Block is considered to be the tip of a blockchain
+func (u UTXOSet) Update(block *Block) {
+	db := u.Blockchain.db
+
+	err := db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(utxoBucket))
+
+		for _, tx := range block.Transactions {
+			if tx.IsCoinbase() == false {
+				for _, vin := range tx.Vin {
+					updatedOuts := TXOutputs{}
+					outsBytes := b.Get(vin.Txid)
+					outs := DeserializeOutputs(outsBytes)
+
+					for outIdx, out := range outs.Outputs {
+						if outIdx != vin.Vout {
+							updatedOuts.Outputs = append(updatedOuts.Outputs, out)
+						}
+					}
+
+					if len(updatedOuts.Outputs) == 0 {
+						err := b.Delete(vin.Txid)
+						if err != nil {
+							log.Panic(err)
+						}
+					} else {
+						err := b.Put(vin.Txid, updatedOuts.Serialize())
+						if err != nil {
+							log.Panic(err)
+						}
+					}
+
+				}
+			}
+
+			newOutputs := TXOutputs{}
+			for _, out := range tx.Vout {
+				newOutputs.Outputs = append(newOutputs.Outputs, out)
+			}
+
+			err := b.Put(tx.ID, newOutputs.Serialize())
+			if err != nil {
+				log.Panic(err)
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		log.Panic(err)
+	}
+}
+
+// NewWallet creates and returns a Wallet
+func NewWallet() *Wallet {
+	private, public := newKeyPair()
+	wallet := Wallet{private, public}
+
+	return &wallet
+}
+
+// GetAddress returns wallet address
+func (w Wallet) GetAddress() []byte {
+	pubKeyHash := HashPubKey(w.PublicKey)
+
+	versionedPayload := append([]byte{version}, pubKeyHash...)
+	checksum := checksum(versionedPayload)
+
+	fullPayload := append(versionedPayload, checksum...)
+	address := Base58Encode(fullPayload)
+
+	return address
+}
+
+// HashPubKey hashes public key
+func HashPubKey(pubKey []byte) []byte {
+	publicSHA256 := sha256.Sum256(pubKey)
+
+	RIPEMD160Hasher := ripemd160.New()
+	_, err := RIPEMD160Hasher.Write(publicSHA256[:])
+	if err != nil {
+		log.Panic(err)
+	}
+	publicRIPEMD160 := RIPEMD160Hasher.Sum(nil)
+
+	return publicRIPEMD160
+}
+
+// ValidateAddress check if address if valid
+func ValidateAddress(address string) bool {
+	pubKeyHash := Base58Decode([]byte(address))
+	actualChecksum := pubKeyHash[len(pubKeyHash)-addressChecksumLen:]
+	version := pubKeyHash[0]
+	pubKeyHash = pubKeyHash[1 : len(pubKeyHash)-addressChecksumLen]
+	targetChecksum := checksum(append([]byte{version}, pubKeyHash...))
+
+	return bytes.Compare(actualChecksum, targetChecksum) == 0
+}
+
+// Checksum generates a checksum for a public key
+func checksum(payload []byte) []byte {
+	firstSHA := sha256.Sum256(payload)
+	secondSHA := sha256.Sum256(firstSHA[:])
+
+	return secondSHA[:addressChecksumLen]
+}
+
+func newKeyPair() (ecdsa.PrivateKey, []byte) {
+	curve := elliptic.P256()
+	private, err := ecdsa.GenerateKey(curve, rand.Reader)
+	if err != nil {
+		log.Panic(err)
+	}
+	pubKey := append(private.PublicKey.X.Bytes(), private.PublicKey.Y.Bytes()...)
+
+	return *private, pubKey
+}
+
+// NewWallets creates Wallets and fills it from a file if it exists
+func NewWallets(nodeID string) (*Wallets, error) {
+	wallets := Wallets{}
+	wallets.Wallets = make(map[string]*Wallet)
+
+	err := wallets.LoadFromFile(nodeID)
+
+	return &wallets, err
+}
+
+// CreateWallet adds a Wallet to Wallets
+func (ws *Wallets) CreateWallet() string {
+	wallet := NewWallet()
+	address := fmt.Sprintf("%s", wallet.GetAddress())
+
+	ws.Wallets[address] = wallet
+
+	return address
+}
+
+// GetAddresses returns an array of addresses stored in the wallet file
+func (ws *Wallets) GetAddresses() []string {
+	var addresses []string
+
+	for address := range ws.Wallets {
+		addresses = append(addresses, address)
+	}
+
+	return addresses
+}
+
+// GetWallet returns a Wallet by its address
+func (ws Wallets) GetWallet(address string) Wallet {
+	return *ws.Wallets[address]
+}
+
+// LoadFromFile loads wallets from the file
+func (ws *Wallets) LoadFromFile(nodeID string) error {
+	walletFile := fmt.Sprintf(walletFile, nodeID)
+	if _, err := os.Stat(walletFile); os.IsNotExist(err) {
+		return err
+	}
+
+	fileContent, err := ioutil.ReadFile(walletFile)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	var wallets Wallets
+	gob.Register(elliptic.P256())
+	decoder := gob.NewDecoder(bytes.NewReader(fileContent))
+	err = decoder.Decode(&wallets)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	ws.Wallets = wallets.Wallets
+
+	return nil
+}
+
+// SaveToFile saves wallets to a file
+func (ws Wallets) SaveToFile(nodeID string) {
+	var content bytes.Buffer
+	walletFile := fmt.Sprintf(walletFile, nodeID)
+
+	gob.Register(elliptic.P256())
+
+	encoder := gob.NewEncoder(&content)
+	err := encoder.Encode(ws)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	err = ioutil.WriteFile(walletFile, content.Bytes(), 0644)
+	if err != nil {
+		log.Panic(err)
+	}
+}
+
+func main() {
+	cli := CLI{}
+	cli.Run()
 }
