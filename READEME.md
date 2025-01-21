@@ -22,112 +22,120 @@ This project is a simple implementation of a blockchain in Go, featuring basic b
 
 ```bash
 go mod init blockchain
+```
 
-Install dependencies:
+### Install dependencies:
 
+```bash
 go get github.com/boltdb/bolt
 go get github.com/stretchr/testify/assert
 go get golang.org/x/crypto/ripemd160
+```
 
-Build the project:
+### Build the project:
+
+```bash
 go build -o blockchain_go *.go
+```
 
-Usage
-Set Up Node 3000
-Open Terminal for Node 3000: Set the NODE_ID environment variable to 3000.
+## Usage
 
-export NODE_ID=3000
+### Set Up Node 3000
 
-Generate a Wallet Address: Use the createwallet command to generate a new wallet address.
+1. **Open Terminal for Node 3000**: Set the `NODE_ID` environment variable to 3000.
+   
+   ```bash
+   export NODE_ID=3000
+   ```
 
-./blockchain_go createwallet
+2. **Generate a Wallet Address**: Use the `createwallet` command to generate a new wallet address.
 
-This will output a new wallet address. Let's assume the generated address is 19Ephd29bSdbC4gzizu58WrbCjBaCdUVc7.
+   ```bash
+   ./blockchain_go createwallet
+   ```
 
-Create a Blockchain with the Valid Address: Use the generated wallet address to create the blockchain.
+3. **Create a Blockchain**: Use the generated wallet address to create the blockchain.
 
-./blockchain_go createblockchain -address 19Ephd29bSdbC4gzizu58WrbCjBaCdUVc7
+   ```bash
+   ./blockchain_go createblockchain -address <your_wallet_address>
+   ```
 
-Save the Genesis Block: Copy the blockchain database to a genesis block file.
-cp blockchain_3000.db blockchain_genesis.db
+4. **Save the Genesis Block**: Copy the blockchain database to a genesis block file.
 
-Set Up Node 3001
-Open Terminal for Node 3001: Set the NODE_ID environment variable to 3001.
-export NODE_ID=3001
+   ```bash
+   cp blockchain_3000.db blockchain_genesis.db
+   ```
 
-Generate Wallet Addresses for Node 3001: Generate some wallet addresses.
+### Set Up Node 3001
 
-./blockchain_go createwallet
-./blockchain_go createwallet
-./blockchain_go createwallet
+1. **Open Terminal for Node 3001**: Set the `NODE_ID` environment variable to 3001.
 
-Let's assume the generated addresses are:
+   ```bash
+   export NODE_ID=3001
+   ```
 
-WALLET_1: 14DhJuzJuwnQTakCk9bbXGeURcW7iVxnJM
-WALLET_2: 1KfVdDvvQ977oVCpUqz7zAPUEiXKrX5avR
-WALLET_3: 1PfVdDvvQ977oVCpUqz7zAPUEiXKrX5avR
-Send Coins to Wallet Addresses: Switch back to Terminal 1 (Node 3000) and send some coins from 19Ephd29bSdbC4gzizu58WrbCjBaCdUVc7 to the wallet addresses
-.
+2. **Generate Wallet Addresses**: Generate wallet addresses for Node 3001.
 
-./blockchain_go send -from 19Ephd29bSdbC4gzizu58WrbCjBaCdUVc7 -to 14DhJuzJuwnQTakCk9bbXGeURcW7iVxnJM -amount 10 -mine
-./blockchain_go send -from 19Ephd29bSdbC4gzizu58WrbCjBaCdUVc7 -to 1KfVdDvvQ977oVCpUqz7zAPUEiXKrX5avR -amount 10 -mine
+   ```bash
+   ./blockchain_go createwallet
+   ./blockchain_go createwallet
+   ./blockchain_go createwallet
+   ```
 
-Start the Node: Start the node.
+3. **Send Coins**: Use Terminal 1 (Node 3000) to send coins to the wallet addresses.
 
-./blockchain_go startnode
+   ```bash
+   ./blockchain_go send -from <your_wallet_address> -to <wallet_1_address> -amount 10 -mine
+   ```
 
-Set Up Node 3001 with Genesis Block
-Copy the Genesis Block: Copy the genesis block file to the blockchain database for node 3001.
-sudo cp blockchain_genesis.db blockchain_3001.db
+4. **Start the Node**: Start the node.
 
-Run the Node: Start the node.
+   ```bash
+   ./blockchain_go startnode
+   ```
 
-./blockchain_go getbalance -address 14DhJuzJuwnQTakCk9bbXGeURcW7iVxnJM
-./blockchain_go getbalance -address 1KfVdDvvQ977oVCpUqz7zAPUEiXKrX5avR
-./blockchain_go getbalance -address 19Ephd29bSdbC4gzizu58WrbCjBaCdUVc7
+### Set Up Node 3002
 
-Set Up Node 3002
-Open Terminal for Node 3002: Set the NODE_ID environment variable to 3002.
-export NODE_ID=3002
+1. **Open Terminal for Node 3002**: Set the `NODE_ID` environment variable to 3002.
 
-Generate a Wallet for Node 3002: Generate a wallet for the miner node.
+   ```bash
+   export NODE_ID=3002
+   ```
 
-./blockchain_go createwallet
+2. **Generate a Wallet for Node 3002**:
 
-Let's assume the generated address is 1RfVdDvvQ977oVCpUqz7zAPUEiXKrX5avR.
+   ```bash
+   ./blockchain_go createwallet
+   ```
 
-Initialize the Blockchain: Copy the genesis block file to the blockchain database for node 3002.
+3. **Copy the Genesis Block**: Copy the genesis block file to the blockchain database for Node 3002.
 
-sudo cp blockchain_genesis.db blockchain_3002.db
+   ```bash
+   sudo cp blockchain_genesis.db blockchain_3002.db
+   ```
 
-Start the Node: Start the node with the miner wallet.
+4. **Start the Node**: Start the node with the miner wallet.
 
-./blockchain_go startnode -miner 1RfVdDvvQ977oVCpUqz7zAPUEiXKrX5avR
+   ```bash
+   ./blockchain_go startnode -miner <miner_wallet_address>
+   ```
 
-Perform Transactions
-Send Coins from WALLET_1 and WALLET_2: Send some coins from WALLET_1 and WALLET_2 to other addresses.
+### Perform Transactions
 
-./blockchain_go send -from 14DhJuzJuwnQTakCk9bbXGeURcW7iVxnJM -to 1PfVdDvvQ977oVCpUqz7zAPUEiXKrX5avR -amount 1
-./blockchain_go send -from 1KfVdDvvQ977oVCpUqz7zAPUEiXKrX5avR -to 1QfVdDvvQ977oVCpUqz7zAPUEiXKrX5avR -amount 1
+1. **Send Coins**: Send coins from one wallet to another.
 
-Mine the New Block: Switch to the miner node (Terminal 4, Node 3002) and see it mining a new block.
+   ```bash
+   ./blockchain_go send -from <wallet_1_address> -to <wallet_2_address> -amount 1
+   ```
 
-Download the Newly Mined Block: Switch to the wallet node (Terminal 3, Node 3001) and start it to download the newly mined block.
+2. **Mine the New Block**: Mine a new block using the miner node.
 
-./blockchain_go startnode
+3. **Check Balances**: Check the balances of the addresses.
 
-Check Balances: Stop the node and check the balances.
+   ```bash
+   ./blockchain_go getbalance -address <wallet_address>
+   ```
 
-./blockchain_go getbalance -address 14DhJuzJuwnQTakCk9bbXGeURcW7iVxnJM
-./blockchain_go getbalance -address 1KfVdDvvQ977oVCpUqz7zAPUEiXKrX5avR
-./blockchain_go getbalance -address 1PfVdDvvQ977oVCpUqz7zAPUEiXKrX5avR
-./blockchain_go getbalance -address 1QfVdDvvQ977oVCpUqz7zAPUEiXKrX5avR
-./blockchain_go getbalance -address 1RfVdDvvQ977oVCpUqz7zAPUEiXKrX5avR
+## Conclusion
 
-
-Conclusion
-By following these steps, you should be able to create a blockchain using valid wallet addresses and perform the scenario successfully. This project demonstrates the basic functionalities of a blockchain, including creating blocks, performing transactions, and interacting with multiple nodes in a network.
-
-
-This README file provides an overview of the project, installation instructions, usage examples, and detailed commands to set up and interact with multiple nodes in your blockchain network.
-This README file provides an overview of the project, installation instructions, usage examples, and detailed commands to set up and interact with multiple nodes in your blockchain network.
+By following these steps, you can create a blockchain using valid wallet addresses and perform transactions across multiple nodes. This project demonstrates essential blockchain functionalities, including creating blocks, handling transactions, and managing a network of nodes.
