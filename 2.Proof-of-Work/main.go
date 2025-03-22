@@ -65,7 +65,7 @@ var (
     maxNonce = math.MaxInt64
 )
 
-const targetBits = 16 // Reduce the difficulty
+const targetBits = 18 // Reduce the difficulty
 
 // IntToHex converts an int64 to a hex string
 func IntToHex(num int64) []byte {
