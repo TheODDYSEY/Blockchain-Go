@@ -1,10 +1,11 @@
-# Bitcoin Implementation in Go
+# <🔗/> BlockchainGo: A Distributed Ledger Implementation
 
 [![Go Version](https://img.shields.io/badge/Go-1.16+-00ADD8?style=flat-square&logo=go)](https://golang.org/)
 [![BoltDB](https://img.shields.io/badge/BoltDB-Database-orange?style=flat-square)](https://github.com/boltdb/bolt)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 [![ECDSA](https://img.shields.io/badge/ECDSA-Cryptography-blue?style=flat-square)](https://en.wikipedia.org/wiki/Elliptic_Curve_Digital_Signature_Algorithm)
 [![P2P](https://img.shields.io/badge/P2P-Network-green?style=flat-square)](https://en.wikipedia.org/wiki/Peer-to-peer)
+[![PoW](https://img.shields.io/badge/PoW-Consensus-red?style=flat-square)](https://en.wikipedia.org/wiki/Proof_of_work)
 
 A step-by-step implementation of a Bitcoin-like blockchain in Go, from basic prototype to a fully functional P2P network. This educational project demonstrates core blockchain concepts through progressive implementation stages.
 
