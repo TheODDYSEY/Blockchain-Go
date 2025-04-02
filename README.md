@@ -251,7 +251,7 @@ go build -o blockchain_go *.go
 ## 🔍 Usage
 
 <div align="center">
-  <img src="https://www.researchgate.net/profile/Mrityunjay-Ghosh/publication/355223429/figure/fig3/AS:1079123128659968@1634294411034/Flow-of-a-transaction-in-Blockchain-technology-39.ppm" alt="Blockchain Flow" width="700">
+  <img src="https://img.phemex.com/wp-content/uploads/2020/08/16074639/process-flow-of-a-blockchain-network.jpg" alt="Blockchain Flow" width="700">
 </div>
 
 
